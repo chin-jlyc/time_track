@@ -211,6 +211,8 @@ window.addEventListener("load", function() {
             return {
                 clients: {},
                 latestTimestamps: {},
+                output: "",
+                showOutput: false,
             }
         },
         template: `
@@ -221,6 +223,11 @@ window.addEventListener("load", function() {
 
                 <button class="btn btn-primary print-output-button" @click="printOutputs">Print Outputs</button>
                 <button class="btn btn-danger clear-all-button" @click="clearTimes">Clear All Times</button>
+
+                <div class="alert alert-primary" v-if="showOutput">
+                    <pre>{{ output }}</pre>
+                    <button class="btn btn-outline-primary" @click="hideOutput">Hide</button>
+                </div>
             </div>
         `,
         mounted: function() {
@@ -242,7 +249,11 @@ window.addEventListener("load", function() {
                 for (const client of Object.values(this.clients)) {
                     output = output + `${client.name}, ${client.timeWorked} minutes, ${this.parseMinutes(client.timeWorked)} hours \n`
                 }
-                alert(output);
+                this.output = output;
+                this.showOutput = true;
+            },
+            hideOutput: function() {
+                this.showOutput = false;
             },
             parseMinutes: function(minutes) {
                 let output = (parseFloat(minutes) / 60)
