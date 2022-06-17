@@ -1,0 +1,16 @@
+.clear-all-button {
+  position: absolute;
+  right: 5px;
+  top: 1px;
+}
+.print-output-button {
+  position: absolute;
+  right: 12%;
+  top: 1px;
+}
+.add-client-form {
+  padding-left: 15px;
+}
+.active-row {
+  background-color: lightgreen;
+}
