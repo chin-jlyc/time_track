@@ -48,11 +48,11 @@ Vue.component("single-client", {
                 <button style="width: 70%" @click="addManualTime">Add</button>
             </td>
             <td>
-                <button class="btn btn-outline-success" @click="startTimer">Start</button>
+                <button class="btn btn-outline-success" @click="startTimer" :disabled="startTime !== null">Start</button>
                 <div v-if="startTime">Started: {{ elapsedTime["minutes"] | parseTime }}</div>
             </td>
             <td>
-                <button class="btn btn-outline-secondary" @click="endTimer">Stop</button>
+                <button class="btn btn-outline-secondary" @click="endTimer" :disabled="startTime == null">Stop</button>
             </td>
             <td>
                 <ul>
@@ -100,7 +100,9 @@ Vue.component("single-client", {
         },
         addAutoTime: function(index) {
             let times = this.client.potentialTimes[index];
-            this.addTime(times["hours"], times["minutes"]);
+            let hours = Math.floor(parseFloat(times["minutes"]) / 60);
+            let minutes = parseFloat(times["minutes"]) % 60;
+            this.addTime(hours, minutes);
 
             this.deleteAutoTime(index);
         },
