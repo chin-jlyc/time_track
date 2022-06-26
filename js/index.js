@@ -23,6 +23,17 @@ Vue.prototype.$storage = Object.freeze({
         let serialized = this._serialize({"clients": allClients});
         localStorage.setItem(this._clientKey, serialized);
     },
+    saveTimer: function (clientName, timerDetails) {
+        let serialized = this._serialize(timerDetails);
+        localStorage.setItem(`${clientName}-timer`, serialized);
+    },
+    loadTimer: function (clientName) {
+        let dumped = localStorage.getItem(`${clientName}-timer`);
+        return this._deserialize(dumped);
+    },
+    clearTimer: function (clientName) {
+        localStorage.removeItem(`${clientName}-timer`);
+    },
 })
 
 Vue.component("single-client", {
@@ -36,10 +47,13 @@ Vue.component("single-client", {
             manualHours: 0,
             manualMins: 0,
             startTime: null,
+            paused: false,
+            pausedTime: 0,
+            oldNow: null,
         }
     },
     template: `
-        <tr :class="{'active-row': startTime !== null}">
+        <tr :class="{'active-row': startTime !== null && !paused, 'paused': paused}">
             <td>{{ client.name }}</td>
             <td>{{ client.timeWorked | parseTime }}</td>
             <td>
@@ -48,7 +62,13 @@ Vue.component("single-client", {
                 <button style="width: 70%" @click="addManualTime">Add</button>
             </td>
             <td>
-                <button class="btn btn-outline-success" @click="startTimer" :disabled="startTime !== null">Start</button>
+                <div v-if="startTime == null">
+                    <button v-if="startTime == null" class="btn btn-outline-success" @click="startTimer">Start</button>
+                </div>
+                <div v-else>
+                    <button v-if="!paused" class="btn btn-outline-warning" @click="pause">Pause</button>
+                    <button v-else class="btn btn-outline-warning" @click="restart">Restart</button>
+                </div>
                 <div v-if="startTime">Started: {{ elapsedTime["minutes"] | parseTime }}</div>
             </td>
             <td>
@@ -67,6 +87,14 @@ Vue.component("single-client", {
             <td><button class="btn btn-outline-danger" @click="deleteClient">Delete</button></td>
         </tr>
     `,
+    created: function() {
+        let storedDetails = this.$storage.loadTimer(this.client.name);
+        if (storedDetails != null) {
+            this.startTime = storedDetails["startTime"];
+            this.paused = storedDetails["paused"];
+            this.pausedTime = storedDetails["pausedTime"];
+        }
+    },
     filters: {
         parseTime: function(time) {
             let minutes = parseFloat(time);
@@ -77,13 +105,33 @@ Vue.component("single-client", {
     },
     computed: {
         elapsedTime: function() {
+            if (this.paused && this.oldNow !== null) {
+                this.pausedTime += this.now - this.oldNow;
+                this.$storage.saveTimer(this.client.name, {
+                    'startTime': this.startTime,
+                    'paused': this.paused,
+                    'pausedTime': this.pausedTime,
+                })
+            }
+            this.oldNow = this.now;
             if (this.startTime !== null) {
-                let msElapsed = this.now - this.startTime;
+                let msElapsed = (this.now - this.startTime) - this.pausedTime;
                 return this.parseElapsedTime(msElapsed);
             }
-        }
+        },
     },
     methods: {
+        pause: function() {
+            this.paused = true;
+        },
+        restart: function() {
+            this.paused = false;
+            this.$storage.saveTimer(this.client.name, {
+                'startTime': this.startTime,
+                'paused': this.paused,
+                'pausedTime': this.pausedTime,
+            });
+        },
         addTime: function(hours, minutes) {
             let total = parseFloat(this.client.timeWorked);
             if (hours !== 0) {
@@ -114,13 +162,22 @@ Vue.component("single-client", {
         },
         startTimer: function() {
             this.startTime = Date.now();
+            this.$storage.saveTimer(this.client.name, {
+                'startTime': this.startTime,
+                'paused': this.paused,
+                'pausedTime': this.pausedTime,
+            })
         },
         endTimer: function() {
-            let msElapsed = Date.now() - this.startTime;
+            let msElapsed = (Date.now() - this.startTime) - this.pausedTime;
             let parsedTime = this.parseElapsedTime(msElapsed);
             this.client.potentialTimes.push(parsedTime);
             this.$storage.saveClients(this.clients);
+            this.$storage.clearTimer(this.client.name);
             this.startTime = null;
+            this.pausedTime = 0;
+            this.paused = false;
+            this.$storage.clearTimer();
         },
         addManualTime: function() {
             this.addTime(this.manualHours, this.manualMins);
@@ -221,12 +278,14 @@ window.addEventListener("load", function() {
                 :clients="clients">
                 </client-display>
 
-                <button class="btn btn-primary print-output-button" @click="printOutputs">Print Outputs</button>
+                <button class="btn btn-primary print-output-button" @click="showOutputs" :disabled="showOutput">Show Outputs</button>
                 <button class="btn btn-danger clear-all-button" @click="clearTimes">Clear All Times</button>
 
                 <div class="alert alert-primary" v-if="showOutput">
-                    <pre>{{ output }}</pre>
-                    <button class="btn btn-outline-primary" @click="hideOutput">Hide</button>
+                    <div v-for="client in clients">
+                        {{ client.name }}, {{ client.timeWorked }} minutes, {{ parseMinutes(client.timeWorked) }}h
+                    </div>
+                    <button class="btn btn-outline-primary" @click="hideOutputs">Hide</button>
                 </div>
             </div>
         `,
@@ -244,15 +303,10 @@ window.addEventListener("load", function() {
                 }
                 e.preventDefault();
             },
-            printOutputs: function() {
-                let output = "";
-                for (const client of Object.values(this.clients)) {
-                    output = output + `${client.name}, ${client.timeWorked} minutes, ${this.parseMinutes(client.timeWorked)} hours \n`
-                }
-                this.output = output;
+            showOutputs: function() {
                 this.showOutput = true;
             },
-            hideOutput: function() {
+            hideOutputs: function() {
                 this.showOutput = false;
             },
             parseMinutes: function(minutes) {
